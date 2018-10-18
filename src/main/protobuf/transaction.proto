@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package com.calvin.http4s.kafka.proto;
+
+message TransactionId {
+    string id = 1;
+}
+
+message Transaction {
+    double amount = 1;
+    string description = 2;
+}
+

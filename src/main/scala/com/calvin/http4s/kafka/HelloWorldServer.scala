@@ -10,21 +10,22 @@ import cats.effect.{Effect, IO, Sync}
 import fs2.{Scheduler, Stream, StreamApp}
 import org.http4s.server.blaze.BlazeBuilder
 import com.calvin.http4s.kafka.proto._
-import com.calvin.http4s.kafka.proto.account._
+import com.calvin.http4s.kafka.proto.transaction._
 import scodec.bits.ByteVector
 import spinoco.fs2.kafka._
 import spinoco.protocol.kafka._
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
+import scala.util.Random
 
 object HelloWorldServer extends StreamApp[IO] {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   def kafkaFs2Producer[F[_]: Effect](scheduler: Scheduler, kafkaClient: KafkaClient[F]): Stream[F, Unit] = {
     scheduler.awakeDelay(1.second).evalMap { _ =>
-      val kId = ByteVector(KID(UUID.randomUUID.toString()).toByteArray.toVector)
-      val kBody = ByteVector(KBody(UUID.randomUUID.toString(), " Test Message").toByteArray.toVector)
+      val kId = ByteVector(TransactionId(UUID.randomUUID.toString()).toByteArray)
+      val kBody = ByteVector(Transaction(Random.nextDouble(), "This is a transaction").toByteArray)
       kafkaClient.publish1(
         topicId = topic("my-topic-1"),
         partition = partition(0),
@@ -35,7 +36,7 @@ object HelloWorldServer extends StreamApp[IO] {
     }
   }
 
-  def kafkaFs2Consumer[F[_]: Effect](kafkaClient: KafkaClient[F]): Stream[F, KID] = {
+  def kafkaFs2Consumer[F[_]: Effect](kafkaClient: KafkaClient[F]): Stream[F, TransactionId] = {
     kafkaClient.subscribe(
       topicId = topic("my-topic-1"),
       partition = partition(0),
@@ -46,11 +47,11 @@ object HelloWorldServer extends StreamApp[IO] {
       maxWaitTime = 30.seconds,
       leaderFailureTimeout = 30.seconds,
       leaderFailureMaxAttempts = 10
-    ).map[KID]{t =>
-        println(t.key.toArray)
-      val kid = KID.parseFrom(t.key.toArray)
-      println(kid)
-      kid
+    ).map{t =>
+      val tId = TransactionId.parseFrom(t.key.toArray)
+      val transaction = Transaction.parseFrom(t.value.message.toArray)
+      println(s"Key: $tId, Value: $transaction")
+      tId
     }
   }
 
@@ -73,6 +74,6 @@ object ServerStream {
       s <- BlazeBuilder[IO]
           .bindHttp(8080, "0.0.0.0")
           .mountService(helloWorldService, "/")
-          .serve concurrently HelloWorldServer.kafkaFs2Producer[IO](scheduler, kafkaClient)
+          .serve concurrently HelloWorldServer.kafkaFs2Producer[IO](scheduler, kafkaClient) concurrently HelloWorldServer.kafkaFs2Consumer[IO](kafkaClient)
     } yield s
 }
