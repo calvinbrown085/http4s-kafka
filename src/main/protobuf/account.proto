@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package com.calvin.http4s.kafka.proto;
+
+message KID {
+    string id = 1;
+}
+
+message KBody {
+    string name = 1;
+    string title = 2;
+}
